@@ -950,18 +950,18 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             continue;
         // on half-cycle 1, grab and drop.
         // on half-cycle 2, perform the rest of the instructions.
-        if ((board->half_cycle == 1) != (inst == 'r' || inst == 'f'))
+        if ((board->half_cycle == 1) != (inst == 'f' || inst == 'r'))
             continue;
         struct vector track_motion = {0, 0};
         // kind of cheesy but it works!
         int32_t arm_length = abs(m->direction_u.u) | abs(m->direction_u.v);
         // first, validate the instruction.
-        if (inst == 'r') {
+        if (inst == 'f') {
             // if the arm is already grabbing, grabbing again does nothing.
             // additionally, wheels don't grab or release.
             if ((m->type & GRABBING) || (m->type & ANY_WHEEL))
                 continue;
-        } else if (inst == 'f') {
+        } else if (inst == 'r') {
             // if the arm isn't grabbing, then releasing does nothing.
             // additionally, wheels don't grab or release.
             if (!(m->type & GRABBING) || (m->type & ANY_WHEEL))
@@ -1005,7 +1005,7 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             struct atom_ref_at_position a = get_atom(board, *m, offset.u, offset.v);
             if (!*a.atom)
                 continue;
-            if (inst == 'r' && !(*a.atom & REMOVED)) {
+            if (inst == 'f' && !(*a.atom & REMOVED)) {
                 for (int i = 0; i < NUMBER_OF_ATOM_TYPES; ++i) {
                     if (*a.atom & ATOM_OF_TYPE(i)) {
                         board->atom_grabs[i]++;
@@ -1020,7 +1020,7 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             }
             if (!(m->type & (GRABBING_LOW_BIT << direction)) || (!(*a.atom & REMOVED) && !(*a.atom & GRABBED)))
                 continue;
-            if (inst == 'f' && !(*a.atom & REMOVED) && (*a.atom & GRABBED)) {
+            if (inst == 'r' && !(*a.atom & REMOVED) && (*a.atom & GRABBED)) {
                 atom grabs = (*a.atom & GRABBED) / GRABBED_ONCE;
                 *a.atom &= ~GRABBED;
                 *a.atom |= (grabs - 1) * GRABBED_ONCE;
@@ -1135,10 +1135,10 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             m->position.v += track_motion.v;
             m->movement = track_motion;
             break;
-        case 'r': // grab
+        case 'f': // grab
             m->type |= GRABBING;
             break;
-        case 'f': // drop
+        case 'r': // drop
             // clear all the mechanism grabbing bits at once.
             m->type &= ~GRABBING_EVERYTHING;
             m->type &= ~GRABBING;

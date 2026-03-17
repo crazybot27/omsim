@@ -12,8 +12,8 @@ static char decode_instruction(char inst)
     case 'r': return 'a';
     case 'E': return 'w';
     case 'e': return 's';
-    case 'G': return 'r';
-    case 'g': return 'f';
+    case 'G': return 'f';
+    case 'g': return 'r';
     case 'P': return 'e';
     case 'p': return 'q';
     case 'A': return 'g';
@@ -890,9 +890,9 @@ bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct s
                                 track_steps--;
                         }
                     }
-                    else if (tape[k] == 'r')
-                        grab = 1;
                     else if (tape[k] == 'f')
+                        grab = 1;
+                    else if (tape[k] == 'r')
                         grab = 0;
                     track.u += motion.u;
                     track.v += motion.v;
@@ -902,7 +902,7 @@ bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct s
                     }
                 }
                 if (grab > 0)
-                    set_tape(tape, n++, 'f', error);
+                    set_tape(tape, n++, 'r', error);
                 while (piston > part.size) {
                     set_tape(tape, n++, 's', error);
                     piston--;
