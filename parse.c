@@ -42,8 +42,8 @@ static uint32_t read_uint32(struct byte_string *contents)
 {
     if (contents->length < 4)
         return 0;
-    uint32_t value = contents->bytes[0] | (contents->bytes[1] << 8) |
-     (contents->bytes[2] << 16) | (contents->bytes[3] << 24);
+    uint32_t value = (uint32_t)contents->bytes[0] | ((uint32_t)contents->bytes[1] << 8) |
+     ((uint32_t)contents->bytes[2] << 16) | ((uint32_t)contents->bytes[3] << 24);
     contents->length -= 4;
     contents->bytes += 4;
     return value;
