@@ -763,7 +763,7 @@ static struct vector normalize_axis(struct vector p)
     return p;
 }
 
-static void record_swing_area(struct board *board, struct vector base, struct vector position, int rotation)
+static void record_swing_area(struct solution *solution, struct board *board, struct vector base, struct vector position, int rotation)
 {
     struct vector offset = { position.u - base.u, position.v - base.v };
     if (rotation == -1)
@@ -775,6 +775,13 @@ static void record_swing_area(struct board *board, struct vector base, struct ve
         mark_used_area(board, (struct vector){ base.u + 3 * offset.u - 1 * offset.v, base.v + 1 * offset.u + 4 * offset.v });
         mark_used_area(board, (struct vector){ base.u + 2 * offset.u - 2 * offset.v, base.v + 2 * offset.u + 4 * offset.v });
         mark_used_area(board, (struct vector){ base.u + 1 * offset.u - 3 * offset.v, base.v + 3 * offset.u + 4 * offset.v });
+        // length 3 cabinet wall collision
+        if (solution->production) {
+            if (!cabinet_for_position(solution, (struct vector){ base.u + 2 * offset.u - 2 * offset.v, base.v + 2 * offset.u + 4 * offset.v })) {
+                report_collision(board, (struct vector){ base.u + 2 * offset.u - 2 * offset.v, base.v + 2 * offset.u + 4 * offset.v }, "grabber went outside cabinet wall");
+                return;
+            }
+        }
         // fall through
     case 2:
         mark_used_area(board, (struct vector){ base.u + 2 * offset.u - 1 * offset.v, base.v + 1 * offset.u + 3 * offset.v });
@@ -999,9 +1006,9 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             struct vector offset = u_offset_for_direction(direction);
             struct vector p = mechanism_relative_position(*m, offset.u, offset.v, 1);
             if (inst == 'a')
-                record_swing_area(board, m->position, p, 1);
+                record_swing_area(solution, board, m->position, p, 1);
             if (inst == 'd')
-                record_swing_area(board, m->position, p, -1);
+                record_swing_area(solution, board, m->position, p, -1);
             struct atom_ref_at_position a = get_atom(board, *m, offset.u, offset.v);
             if (!*a.atom)
                 continue;
