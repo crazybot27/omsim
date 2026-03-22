@@ -1537,13 +1537,18 @@ static void consume_output(struct solution *solution, struct board *board, struc
 
     if (!repeating && molecule->size != io->number_of_atoms)
         return;
-    if (repeating && molecule->size < io->number_of_atoms - 1)
+    int ignorable_atoms = repeating ? molecule->size - (io->number_of_atoms - 1) : 0;
+    if (ignorable_atoms < 0)
         return;
 
     for (uint32_t i = 0; i < molecule->size; ++i) {
         struct atom_ref_at_position a = molecule->atoms[i];
-        if (repeating && is_ignored_output_position(io, a.position))
+        if (repeating && is_ignored_output_position(io, a.position)) {
+            --ignorable_atoms;
+            if (ignorable_atoms < 0)
+                return;
             continue;
+        }
         if (!repeating && (*a.atom & GRABBED))
             return;
         atom target = 0;
