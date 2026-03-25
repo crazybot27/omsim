@@ -22,6 +22,7 @@ void print_help(FILE *f)
     fprintf(f, "  -p --puzzle-file <file>     Specify a puzzle file\n");
     fprintf(f, "  -f --puzzle-folder <folder> Specify a folder containing puzzles\n");
     fprintf(f, "  -m --metric <name>          Evaluate the given metric\n");
+    fprintf(f, "  -i --output-intervals       Print output intervals\n");
     fprintf(f, "  -s --steady-state           Simulate up to steady-state\n");
     fprintf(f, "  -d --disable-limits         Disable simulation limits\n");
     fprintf(f, "  -h --help                   Show this help message and exit\n");
@@ -48,6 +49,7 @@ int main(int argc, char *argv[])
 
     bool steady_state = false;
     bool disable_limits = false;
+    bool print_output_intervals = false;
 
     char *const *solution_paths = NULL;
     unsigned int number_of_solution_paths = 0;
@@ -55,13 +57,14 @@ int main(int argc, char *argv[])
     static struct option long_options[] = {{"puzzle-file", required_argument, NULL, 'p'},
                                            {"puzzle-folder", required_argument, NULL, 'f'},
                                            {"metric", required_argument, NULL, 'm'},
+                                           {"output-intervals", no_argument, NULL, 'i'},
                                            {"steady-state", no_argument, NULL, 's'},
                                            {"disable-limits", no_argument, NULL, 'd'},
                                            {"help", no_argument, NULL, 'h'},
                                            {NULL, 0, NULL, 0}};
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "p:f:m:sdh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "p:f:m:isdh", long_options, NULL)) != -1) {
         switch (opt) {
         case 'm':
             if (number_of_requested_metrics >=
@@ -70,6 +73,9 @@ int main(int argc, char *argv[])
                 return -1;
             }
             requested_metrics[number_of_requested_metrics++] = optarg;
+            break;
+        case 'i':
+            print_output_intervals = true;
             break;
         case 'd':
             disable_limits = true;
@@ -147,7 +153,7 @@ int main(int argc, char *argv[])
         if (number_of_solution_paths > 1)
             printf("%s:\n", solution_path);
 
-        if (number_of_requested_metrics > 0) {
+        if (number_of_requested_metrics > 0 || print_output_intervals) {
             for (int i = 0; i < number_of_requested_metrics; ++i) {
                 double value = verifier_evaluate_approximate_metric(verifier, requested_metrics[i]);
                 printf("%s: ", requested_metrics[i]);
@@ -157,6 +163,30 @@ int main(int argc, char *argv[])
                     verifier_error_clear(verifier);
                 } else
                     printf("%g\n", value);
+            }
+            if (print_output_intervals) {
+                printf("output intervals: ");
+                int n = verifier_number_of_output_intervals(verifier);
+                int r = verifier_output_intervals_repeat_after(verifier);
+                if (verifier_error(verifier)) {
+                    print_verifier_error(verifier);
+                    retval = -1;
+                    verifier_error_clear(verifier);
+                } else {
+                    bool printed_bracket = false;
+                    for (int i = 0; i < n; ++i) {
+                        if (i > 0)
+                            printf(" ");
+                        if (i >= r && !printed_bracket) {
+                            printf("[");
+                            printed_bracket = true;
+                        }
+                        printf("%d", verifier_output_interval(verifier, i));
+                    }
+                    if (printed_bracket)
+                        printf("]");
+                    printf("\n");
+                }
             }
         } else {
             int cost = verifier_evaluate_metric(verifier, "cost");
