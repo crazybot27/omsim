@@ -110,58 +110,56 @@ typedef uint64_t atom;
 // flags is set.
 #define TEMPORARY_FLAGS (BEING_DROPPED | RECENT_BONDS)
 
-enum mechanism_type {
-    NO_MECHANISM,
+// mechanism type values:
 
-    CALCIFICATION = 1 << 0,
-    ANIMISMUS = 1 << 1,
-    PROJECTION = 1 << 2,
-    DISPERSION = 1 << 3,
-    PURIFICATION = 1 << 4,
-    DUPLICATION = 1 << 5,
-    UNIFICATION = 1 << 6,
-    BONDING = 1 << 7,
-    UNBONDING = 1 << 8,
-    TRIPLEX_BONDING = 1 << 9,
-    MULTI_BONDING = 1 << 10,
-    DISPOSAL = 1 << 11,
-    EQUILIBRIUM = 1 << 12,
+#define CALCIFICATION (1UL << 0)
+#define ANIMISMUS (1UL << 1)
+#define PROJECTION (1UL << 2)
+#define DISPERSION (1UL << 3)
+#define PURIFICATION (1UL << 4)
+#define DUPLICATION (1UL << 5)
+#define UNIFICATION (1UL << 6)
+#define BONDING (1UL << 7)
+#define UNBONDING (1UL << 8)
+#define TRIPLEX_BONDING (1UL << 9)
+#define MULTI_BONDING (1UL << 10)
+#define DISPOSAL (1UL << 11)
+#define EQUILIBRIUM (1UL << 12)
 
-    CONDUIT = 1 << 13,
+#define CONDUIT (1UL << 13)
 
-    ARM = 1 << 14,
-    TWO_ARM = 1 << 15,
-    THREE_ARM = 1 << 16,
-    SIX_ARM = 1 << 17,
-    PISTON = 1 << 18,
+#define ARM (1UL << 14)
+#define TWO_ARM (1UL << 15)
+#define THREE_ARM (1UL << 16)
+#define SIX_ARM (1UL << 17)
+#define PISTON (1UL << 18)
 
-    VAN_BERLO = 1 << 19,
-    RAVARI = 1 << 20,
+#define VAN_BERLO (1UL << 19)
+#define RAVARI (1UL << 20)
 
-    // what is this arm grabbing?  each of the 6 possible grabbing directions
-    // are tracked using a separate bit.
-    GRABBING_LOW_BIT = 1 << 21,
+// what is this arm grabbing?  each of the 6 possible grabbing directions
+// are tracked using a separate bit.
+#define GRABBING_LOW_BIT (1UL << 21)
 
-    // is the arm itself grabbing?
-    GRABBING = 1 << 27,
+// is the arm itself grabbing?
+#define GRABBING (1UL << 27)
 
-    // were the grabbed atoms moved this cycle?
-    MOVED_GRABBED_ATOMS = 1 << 28,
+// were the grabbed atoms moved this cycle?
+#define MOVED_GRABBED_ATOMS (1UL << 28)
 
-    PROLIFERATION = 1 << 29,
-    DIVISION = 1 << 30,
-    REJECTION = 1 << 31,
-};
+#define PROLIFERATION (1UL << 29)
+#define DIVISION (1UL << 30)
+#define REJECTION (1UL << 31)
 
-static const enum mechanism_type GRABBING_EVERYTHING = 0x3FULL * GRABBING_LOW_BIT;
+static const uint32_t GRABBING_EVERYTHING = 0x3FULL * GRABBING_LOW_BIT;
 
-static const enum mechanism_type ANY_GLYPH = CALCIFICATION | ANIMISMUS |
+static const uint32_t ANY_GLYPH = CALCIFICATION | ANIMISMUS |
  PROJECTION | DISPERSION | PURIFICATION | DUPLICATION | UNIFICATION | BONDING |
  UNBONDING | TRIPLEX_BONDING | MULTI_BONDING | DISPOSAL | EQUILIBRIUM |
  PROLIFERATION | DIVISION | REJECTION | CONDUIT;
-static const enum mechanism_type ANY_ARM = ARM | TWO_ARM | THREE_ARM | SIX_ARM |
+static const uint32_t ANY_ARM = ARM | TWO_ARM | THREE_ARM | SIX_ARM |
  PISTON | VAN_BERLO | RAVARI;
-static const enum mechanism_type ANY_WHEEL = VAN_BERLO | RAVARI;
+static const uint32_t ANY_WHEEL = VAN_BERLO | RAVARI;
 
 struct vector {
     int32_t u;
@@ -186,7 +184,7 @@ struct atom_at_position {
 };
 
 struct mechanism {
-    enum mechanism_type type;
+    uint32_t type;
 
     struct vector position;
 
@@ -567,13 +565,13 @@ bool repeat_molecule(struct input_output *io, uint32_t number_of_repetitions,
  const char **error);
 
 // the origin is always the last vector in the footprint of a glyph.
-const struct vector *glyph_footprint(enum mechanism_type type);
+const struct vector *glyph_footprint(uint32_t mechanism_type);
 
 // geometric helper functions.
 struct vector u_offset_for_direction(int direction);
 struct vector v_offset_for_direction(int direction);
 int direction_for_offset(struct vector d);
-int angular_distance_between_grabbers(enum mechanism_type);
+int angular_distance_between_grabbers(uint32_t mechanism_type);
 struct vector mechanism_relative_position(struct mechanism m, int32_t du, int32_t dv, int32_t w);
 atom bond_direction(struct mechanism m, int32_t du, int32_t dv);
 
