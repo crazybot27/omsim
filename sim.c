@@ -1153,11 +1153,14 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
         default:
             break;
         }
-        // the weird (uint32_t)-(int64_t) thing is to handle the INT_MIN case.
-        if (m->arm_rotation > 0 && (uint32_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
-            solution->maximum_absolute_arm_rotation = (uint32_t)m->arm_rotation;
-        else if (m->arm_rotation < 0 && (uint32_t)-(int64_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
-            solution->maximum_absolute_arm_rotation = (uint32_t)-(int64_t)m->arm_rotation;
+        
+        if (!(m->type & ANY_WHEEL)) { // exclude wheels from maximum_absolute_arm_rotation
+            // the weird (uint32_t)-(int64_t) thing is to handle the INT_MIN case.
+            if (m->arm_rotation > 0 && (uint32_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
+                solution->maximum_absolute_arm_rotation = (uint32_t)m->arm_rotation;
+            else if (m->arm_rotation < 0 && (uint32_t)-(int64_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
+                solution->maximum_absolute_arm_rotation = (uint32_t)-(int64_t)m->arm_rotation;
+        }
     }
     // carry out deferred movements.
     if (board->half_cycle == 2) {
