@@ -274,12 +274,6 @@ struct input_output {
     // the number of times this output has consumed something.
     uint64_t number_of_outputs;
 
-    // normally, a repeating output only goes up to six repetitions.  but we
-    // keep counting after that so throughput can be measured in the limit.
-    // that means extending the footprint of the output every time we hit a new
-    // multiple of six.  this variable tracks the number of repetitions the
-    // footprint currently contains.
-    uint32_t number_of_repetitions;
     // how much should number_of_outputs go up for every matched repetition?
     uint32_t outputs_per_repetition;
 
@@ -559,10 +553,6 @@ static inline bool position_may_be_visible_to_solution(struct solution *solution
 void add_chain_atom_to_table(struct board *board, uint32_t chain_atom_index);
 uint32_t lookup_chain_atom(struct board *board, struct vector query);
 void move_chain_atom_to_list(struct board *board, uint32_t chain_atom_index, uint32_t *list);
-
-// used during decoding.
-bool repeat_molecule(struct input_output *io, uint32_t number_of_repetitions,
- const char **error);
 
 // the origin is always the last vector in the footprint of a glyph.
 const struct vector *glyph_footprint(uint32_t mechanism_type);

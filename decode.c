@@ -471,11 +471,103 @@ static char* check_production_constraints(struct solution *solution, struct puzz
 
     return NULL;
 }
+
 static void set_tape(char *tape, int n, int inst, const char **error)
 {
     if (tape[n])
         *error = "solution contains an instruction conflict";
     tape[n] = inst;
+}
+
+static bool repeat_molecule(struct input_output *io, const char **error)
+{
+    if (io->number_of_original_atoms == 0) {
+        *error = "puzzle contains an empty infinite product";
+        return false;
+    }
+    struct atom_at_position placeholder = io->original_atoms[io->number_of_original_atoms - 1];
+    struct vector offset = placeholder.position;
+    offset.u -= io->repetition_origin.u;
+    offset.v -= io->repetition_origin.v;
+    placeholder.position.u += offset.u * (REPEATING_OUTPUT_REPETITIONS - 1);
+    placeholder.position.v += offset.v * (REPEATING_OUTPUT_REPETITIONS - 1);
+    struct atom_at_position *atoms = calloc((io->number_of_original_atoms - 1) * REPEATING_OUTPUT_REPETITIONS + 1,
+     sizeof(io->atoms[0]));
+    for (uint32_t i = 0; i < REPEATING_OUTPUT_REPETITIONS; ++i) {
+        for (uint32_t j = 0; j < io->number_of_original_atoms - 1; ++j) {
+            struct atom_at_position *a = &atoms[(io->number_of_original_atoms - 1) * i + j];
+            *a = io->original_atoms[j];
+            bool origin = vectors_equal(a->position, io->repetition_origin);
+            a->position.u += i * offset.u;
+            a->position.v += i * offset.v;
+            a->atom = io->original_atoms[j].atom;
+            // add the incoming bonds from the previous monomer.
+            if (origin && i > 0)
+                a->atom |= placeholder.atom & ALL_BONDS;
+        }
+    }
+    atoms[(io->number_of_original_atoms - 1) * REPEATING_OUTPUT_REPETITIONS] = placeholder;
+    free(io->atoms);
+    io->atoms = atoms;
+    io->number_of_atoms = (io->number_of_original_atoms - 1) * REPEATING_OUTPUT_REPETITIONS + 1;
+
+    io->min_v = INT32_MAX;
+    io->max_v = INT32_MIN;
+    for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
+        if (io->atoms[j].atom & REPEATING_OUTPUT_PLACEHOLDER)
+            continue;
+        struct vector p = io->atoms[j].position;
+        if (p.v < io->min_v)
+            io->min_v = p.v;
+        if (p.v > io->max_v)
+            io->max_v = p.v;
+    }
+    if ((int64_t)io->max_v - (int64_t)io->min_v > 99999) {
+        *error = "solution contains an infinite product with too many rows";
+        return false;
+    }
+    size_t rows = io->max_v - io->min_v + 1;
+    io->row_min_u = realloc(io->row_min_u, rows * sizeof(int32_t));
+    io->row_max_u = realloc(io->row_max_u, rows * sizeof(int32_t));
+    for (size_t j = 0; j < rows; ++j) {
+        io->row_min_u[j] = INT32_MAX;
+        io->row_max_u[j] = INT32_MIN;
+    }
+    for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
+        if (io->atoms[j].atom & REPEATING_OUTPUT_PLACEHOLDER)
+            continue;
+        struct vector p = io->atoms[j].position;
+        size_t row = p.v - io->min_v;
+        if (p.u < io->row_min_u[row])
+            io->row_min_u[row] = p.u;
+        if (p.u > io->row_max_u[row])
+            io->row_max_u[row] = p.u;
+    }
+    for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
+        if (io->atoms[j].atom & REPEATING_OUTPUT_PLACEHOLDER)
+            continue;
+        struct vector p = io->atoms[j].position;
+        size_t row = p.v - io->min_v;
+        if (p.u + 1 <= io->row_max_u[row])
+            io->atoms[j].atom |= 1ULL << (RECENT_BOND + 0);
+        if (p.v != io->max_v) {
+            size_t neighbor = p.v + 1 - io->min_v;
+            if (p.u >= io->row_min_u[neighbor] && p.u <= io->row_max_u[neighbor])
+                io->atoms[j].atom |= 1ULL << (RECENT_BOND + 1);
+            if (p.u - 1 >= io->row_min_u[neighbor] && p.u - 1 <= io->row_max_u[neighbor])
+                io->atoms[j].atom |= 1ULL << (RECENT_BOND + 2);
+        }
+        if (p.u - 1 >= io->row_min_u[row])
+            io->atoms[j].atom |= 1ULL << (RECENT_BOND + 3);
+        if (p.v != io->min_v) {
+            size_t neighbor = p.v - 1 - io->min_v;
+            if (p.u >= io->row_min_u[neighbor] && p.u <= io->row_max_u[neighbor])
+                io->atoms[j].atom |= 1ULL << (RECENT_BOND + 4);
+            if (p.u + 1 >= io->row_min_u[neighbor] && p.u + 1 <= io->row_max_u[neighbor])
+                io->atoms[j].atom |= 1ULL << (RECENT_BOND + 5);
+        }
+    }
+    return true;
 }
 
 bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct solution_file *sf, const char **error)
@@ -739,7 +831,7 @@ bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct s
             io->number_of_atoms = 0;
             io->repetition_origin = m.position;
             io->outputs_per_repetition = pf->output_scale;
-            if (!repeat_molecule(io, REPEATING_OUTPUT_REPETITIONS, error)) {
+            if (!repeat_molecule(io, error)) {
                 destroy(solution, 0);
                 return false;
             }
