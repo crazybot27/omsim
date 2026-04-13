@@ -143,9 +143,9 @@ int direction_for_offset(struct vector d)
     return -1;
 }
 
-int angular_distance_between_grabbers(enum mechanism_type type)
+int angular_distance_between_grabbers(uint32_t mechanism_type)
 {
-    switch (type & ANY_ARM) {
+    switch (mechanism_type & ANY_ARM) {
     case ARM:
     case PISTON:
         return 6;
@@ -1762,7 +1762,7 @@ bool repeat_molecule(struct input_output *io, uint32_t repetitions, const char *
 }
 
 struct footprint {
-    enum mechanism_type type;
+    uint32_t type;
     const struct vector *hexes;
 };
 
@@ -1901,10 +1901,10 @@ static struct footprint footprints[] = {
     },
 };
 
-const struct vector *glyph_footprint(enum mechanism_type type)
+const struct vector *glyph_footprint(uint32_t mechanism_type)
 {
     for (int i = 0; i < sizeof(footprints)/sizeof(footprints[0]); ++i) {
-        if (type & footprints[i].type)
+        if (mechanism_type & footprints[i].type)
             return footprints[i].hexes;
     }
     static const struct vector trivial_footprint[] = { { 0, 0 } };
