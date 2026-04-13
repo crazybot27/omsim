@@ -46,7 +46,7 @@ static atom decode_bond_type(unsigned char bond_type)
     return bonds;
 }
 
-static uint32_t decode_mechanism_type(struct byte_string part_name)
+static enum mechanism_type decode_mechanism_type(struct byte_string part_name)
 {
     if (byte_string_is(part_name, "glyph-calcification"))
         return CALCIFICATION;
@@ -512,8 +512,8 @@ bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct s
             *error = "solution contains a part that has been disabled in the puzzle file";
             return false;
         }
-        uint32_t mechanism_type = decode_mechanism_type(sf->parts[i].name);
-        if (mechanism_type & ANY_ARM) {
+        enum mechanism_type type = decode_mechanism_type(sf->parts[i].name);
+        if (type & ANY_ARM) {
             if (sf->parts[i].size > 3) {
                 *error = "solution contains a too-long arm";
                 return false;
@@ -522,7 +522,7 @@ bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct s
                 return false;
             }
             number_of_arms++;
-        } else if (mechanism_type & ANY_GLYPH)
+        } else if (type & ANY_GLYPH)
             number_of_glyphs++;
         else if (byte_string_is(sf->parts[i].name, "track"))
             number_of_track_hexes += sf->parts[i].number_of_track_hexes;
