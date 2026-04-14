@@ -236,7 +236,7 @@ static double measure_quadratic_swing_area(struct chain_swing *starting_point, i
     return atan2(SQRT3_2 * delta.direction.v, delta.direction.u + 0.5 * delta.direction.v) / M_PI * length_squared * 3;
 }
 
-struct steady_state run_until_steady_state(struct solution *solution, struct board *board, uint64_t cycle_limit)
+struct steady_state run_until_steady_state(struct solution *solution, struct board *board, uint32_t number_of_inputs, uint64_t cycle_limit)
 {
     struct snapshot snapshot = { 0 };
     uint64_t check_period = solution->tape_period;
@@ -258,9 +258,15 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
         if (!disable_check_until_next_snapshot && board->cycle % check_period == 0 && check_snapshot(solution, board, &snapshot)) {
             // printf("check passed on cycle %llu\n", board->cycle);
             uint64_t repetition_period_length = board->cycle - snapshot.cycle;
+            uint32_t number_of_outputs = 0;
+            for (uint32_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
+                if (solution->inputs_and_outputs[i].type & OUTPUT) number_of_outputs++;   
+            }
             struct steady_state result = {
                 .number_of_cycles = board->cycle - snapshot.cycle,
                 .number_of_outputs = solution->number_of_inputs_and_outputs ? UINT64_MAX : 0,
+                .number_of_inputs_by_input = calloc(number_of_inputs, sizeof(uint64_t)),
+                .number_of_outputs_by_output = calloc(number_of_outputs, sizeof(uint64_t)),
                 .outputs_repeat_after_cycle = board->cycle,
                 .eventual_behavior = EVENTUALLY_ENTERS_STEADY_STATE,
             };
@@ -507,4 +513,11 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
     return (struct steady_state){
         .eventual_behavior = board->collision ? EVENTUALLY_STOPS_RUNNING : EVENTUALLY_REACHES_CYCLE_LIMIT,
     };
+}
+
+void destroy_steady_state(void *steady_state)
+{
+    struct steady_state *s = steady_state;
+    free(s->number_of_inputs_by_input);
+    free(s->number_of_outputs_by_output);
 }

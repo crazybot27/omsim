@@ -92,8 +92,8 @@ struct throughput_measurements {
     int64_t throughput_cycles;
     int64_t throughput_outputs;
 
-    int64_t throughput_inputs_by_input[MAX_INPUT_OUTPUTS];
-    int64_t throughput_outputs_by_output[MAX_INPUT_OUTPUTS];
+    int64_t *throughput_inputs_by_input;
+    int64_t *throughput_outputs_by_output;
 
     int64_t throughput_linear_area;
     double throughput_quadratic_area;
@@ -105,6 +105,12 @@ struct throughput_measurements {
     struct error error;
     bool valid;
 };
+
+void destroy_throughput_measurements(void *throughput_measurements) {
+    struct throughput_measurements *t = throughput_measurements;
+    free(t->throughput_inputs_by_input);
+    free(t->throughput_outputs_by_output);
+}
 
 struct verifier {
     struct puzzle_file *pf;
@@ -231,6 +237,7 @@ void verifier_destroy(void *verifier)
     struct verifier *v = verifier;
     free_puzzle_file(v->pf);
     free_solution_file(v->sf);
+    destroy_throughput_measurements(&v->throughput_measurements);
     verifier_wrong_output_clear(v);
     free(v->output_intervals);
     free(v);
@@ -579,6 +586,8 @@ static struct throughput_measurements measure_throughput(struct verifier *v)
         .valid = true,
         .throughput_cycles = -1,
         .throughput_outputs = -1,
+        .throughput_inputs_by_input = calloc(v->pf->number_of_inputs, sizeof(uint64_t)),
+        .throughput_outputs_by_output = calloc(v->pf->number_of_outputs, sizeof(uint64_t)),
         .throughput_linear_area = -1,
         .throughput_quadratic_area = -1,
         .throughput_waste = -1,
@@ -593,7 +602,7 @@ static struct throughput_measurements measure_throughput(struct verifier *v)
         board.collision_check_limit = v->collision_check_limit;
     board.fails_on_wrong_output_mask = v->fails_on_wrong_output_mask;
     board.fails_on_wrong_output_bonds_mask = v->fails_on_wrong_output_bonds_mask;
-    struct steady_state steady_state = run_until_steady_state(&solution, &board, v->disable_limits ? UINT64_MAX : v->cycle_limit);
+    struct steady_state steady_state = run_until_steady_state(&solution, &board, v->pf->number_of_inputs, v->disable_limits ? UINT64_MAX : v->cycle_limit);
 
     if (board.collision) {
         m.error.description = board.collision_reason;
@@ -603,8 +612,10 @@ static struct throughput_measurements measure_throughput(struct verifier *v)
     } else if (steady_state.eventual_behavior == EVENTUALLY_ENTERS_STEADY_STATE) {
         m.throughput_cycles = steady_state.number_of_cycles;
         m.throughput_outputs = steady_state.number_of_outputs;
-        for (int i = 0; i < MAX_INPUT_OUTPUTS; i++) {
+        for (uint32_t i = 0; i < v->pf->number_of_inputs; i++) {
             m.throughput_inputs_by_input[i] = steady_state.number_of_inputs_by_input[i];
+        }
+        for (uint32_t i = 0; i < v->pf->number_of_outputs; i++) {
             m.throughput_outputs_by_output[i] = steady_state.number_of_outputs_by_output[i];
         }
         m.throughput_linear_area = steady_state.linear_area_growth;
@@ -715,6 +726,7 @@ static struct throughput_measurements measure_throughput(struct verifier *v)
             }
         }
     }
+    destroy_steady_state(&steady_state);
     check_wrong_output_and_destroy(v, &solution, &board);
     return m;
 }
@@ -845,7 +857,7 @@ int verifier_evaluate_metric(void *verifier, const char *metric)
         metric += strlen("per repetition inputs with id ");
         char *endptr = 0;
         int input_id = strtol(metric, &endptr, 10);
-        if (input_id < 0 || input_id >= MAX_INPUT_OUTPUTS || endptr == metric) {
+        if (input_id < 0 || input_id >= v->pf->number_of_inputs || endptr == metric) {
              v->error = (struct error){ .description = "invalid input id" };
             return -1;
         }
@@ -857,7 +869,7 @@ int verifier_evaluate_metric(void *verifier, const char *metric)
         metric += strlen("per repetition outputs with id ");
         char *endptr = 0;
         int output_id = strtol(metric, &endptr, 10);
-        if (output_id < 0 || output_id >= MAX_INPUT_OUTPUTS || endptr == metric) {
+        if (output_id < 0 || output_id >= v->pf->number_of_outputs || endptr == metric) {
              v->error = (struct error){ .description = "invalid output id" };
             return -1;
         }

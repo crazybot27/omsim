@@ -10,6 +10,9 @@
 const char *verifier_find_puzzle_name_in_solution_bytes(const char *solution_bytes,
  int solution_length, int *name_length);
 
+// destroys a throughput_measurements object.
+void destroy_throughput_measurements(void *throughput_measurements);
+
 // takes the path of a .puzzle and a .solution file.  returns a pointer to a
 // newly-allocated verifier object.  if the files couldn't be parsed, the
 // verifier_error() function will return a non-null string value describing the
