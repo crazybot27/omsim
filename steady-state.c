@@ -272,9 +272,16 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                     break;
             }
             for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
+                if (!(solution->inputs_and_outputs[i].type & INPUT))
+                    continue;
+                uint64_t inputs = solution->inputs_and_outputs[i].number_of_outputs - snapshot.output_count[i];
+                result.number_of_inputs_by_input[solution->inputs_and_outputs[i].puzzle_index] = inputs;
+            }
+            for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
                 if (!(solution->inputs_and_outputs[i].type & SINGLE_OUTPUT))
                     continue;
                 uint64_t outputs = solution->inputs_and_outputs[i].number_of_outputs - snapshot.output_count[i];
+                result.number_of_outputs_by_output[solution->inputs_and_outputs[i].puzzle_index] = outputs;
                 if (outputs < result.number_of_outputs)
                     result.number_of_outputs = outputs;
             }

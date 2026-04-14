@@ -1440,6 +1440,7 @@ static void spawn_inputs(struct solution *solution, struct board *board)
         struct input_output *io = &solution->inputs_and_outputs[i];
         if (!(io->type & INPUT) || (io->type & BLOCKED))
             continue;
+        io->number_of_outputs++;
         uint32_t n = io->number_of_atoms;
         for (uint32_t j = 0; j < n; ++j) {
             atom input = io->atoms[j].atom;

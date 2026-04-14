@@ -91,6 +91,10 @@ struct per_cycle_measurements {
 struct throughput_measurements {
     int64_t throughput_cycles;
     int64_t throughput_outputs;
+
+    int64_t throughput_inputs_by_input[MAX_INPUT_OUTPUTS];
+    int64_t throughput_outputs_by_output[MAX_INPUT_OUTPUTS];
+
     int64_t throughput_linear_area;
     double throughput_quadratic_area;
     enum growth_order area_growth_order;
@@ -599,6 +603,10 @@ static struct throughput_measurements measure_throughput(struct verifier *v)
     } else if (steady_state.eventual_behavior == EVENTUALLY_ENTERS_STEADY_STATE) {
         m.throughput_cycles = steady_state.number_of_cycles;
         m.throughput_outputs = steady_state.number_of_outputs;
+        for (int i = 0; i < MAX_INPUT_OUTPUTS; i++) {
+            m.throughput_inputs_by_input[i] = steady_state.number_of_inputs_by_input[i];
+            m.throughput_outputs_by_output[i] = steady_state.number_of_outputs_by_output[i];
+        }
         m.throughput_linear_area = steady_state.linear_area_growth;
         m.throughput_quadratic_area = steady_state.quadratic_area_growth;
         m.area_growth_order = steady_state.area_growth_order;
@@ -833,6 +841,30 @@ int verifier_evaluate_metric(void *verifier, const char *metric)
             v->throughput_measurements = measure_throughput(v);
         v->error = v->throughput_measurements.error;
         return v->throughput_measurements.throughput_outputs;
+    } else if (!strncmp("per repetition inputs with id ", metric, strlen("per repetition inputs with id "))) {
+        metric += strlen("per repetition inputs with id ");
+        char *endptr = 0;
+        int input_id = strtol(metric, &endptr, 10);
+        if (input_id < 0 || input_id >= MAX_INPUT_OUTPUTS || endptr == metric) {
+             v->error = (struct error){ .description = "invalid input id" };
+            return -1;
+        }
+        if (!v->throughput_measurements.valid)
+            v->throughput_measurements = measure_throughput(v);
+        v->error = v->throughput_measurements.error;
+        return v->throughput_measurements.throughput_inputs_by_input[input_id];
+    } else if (!strncmp("per repetition outputs with id ", metric, strlen("per repetition outputs with id "))) {
+        metric += strlen("per repetition outputs with id ");
+        char *endptr = 0;
+        int output_id = strtol(metric, &endptr, 10);
+        if (output_id < 0 || output_id >= MAX_INPUT_OUTPUTS || endptr == metric) {
+             v->error = (struct error){ .description = "invalid output id" };
+            return -1;
+        }
+        if (!v->throughput_measurements.valid)
+            v->throughput_measurements = measure_throughput(v);
+        v->error = v->throughput_measurements.error;
+        return v->throughput_measurements.throughput_outputs_by_output[output_id];
     } else if (!strcmp(metric, "per repetition area")) {
         if (!v->throughput_measurements.valid)
             v->throughput_measurements = measure_throughput(v);

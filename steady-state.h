@@ -3,6 +3,7 @@
 
 #include "sim.h"
 
+#define MAX_INPUT_OUTPUTS 256
 enum eventual_behavior {
     EVENTUALLY_ENTERS_STEADY_STATE,
     EVENTUALLY_STOPS_RUNNING,
@@ -18,6 +19,9 @@ struct steady_state {
 
     // how many outputs are produced during this loop?
     uint64_t number_of_outputs;
+
+    uint64_t number_of_inputs_by_input[MAX_INPUT_OUTPUTS];
+    uint64_t number_of_outputs_by_output[MAX_INPUT_OUTPUTS];
 
     // after which cycle do outputs start to repeat?
     uint64_t outputs_repeat_after_cycle;
