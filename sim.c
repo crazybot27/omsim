@@ -1440,7 +1440,7 @@ static void spawn_inputs(struct solution *solution, struct board *board)
         struct input_output *io = &solution->inputs_and_outputs[i];
         if (!(io->type & INPUT) || (io->type & BLOCKED))
             continue;
-        io->number_of_outputs++;
+        io->spawned_consumed++;
         uint32_t n = io->number_of_atoms;
         for (uint32_t j = 0; j < n; ++j) {
             atom input = io->atoms[j].atom;
@@ -1592,12 +1592,12 @@ static void consume_output(struct solution *solution, struct board *board, struc
 
     // if the output is a match remove the output and increment the output counter.
     if (repeating) {
-        io->number_of_outputs = io->number_of_repetitions * io->outputs_per_repetition;
+        io->spawned_consumed = io->number_of_repetitions * io->outputs_per_repetition;
         if (board->chain_mode == EXTEND_CHAIN)
             match_repeating_output_with_chain_atoms(board, io);
     } else {
         remove_molecule(board, molecule);
-        io->number_of_outputs++;
+        io->spawned_consumed++;
     }
 }
 
@@ -1625,7 +1625,7 @@ static void check_completion(struct solution *solution, struct board *board)
     for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
         if (!(solution->inputs_and_outputs[i].type & OUTPUT))
             continue;
-        uint64_t count = solution->inputs_and_outputs[i].number_of_outputs;
+        uint64_t count = solution->inputs_and_outputs[i].spawned_consumed;
         if (count < min)
             min = count;
     }

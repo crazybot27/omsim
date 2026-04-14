@@ -612,10 +612,10 @@ static struct throughput_measurements measure_throughput(struct verifier *v)
     } else if (steady_state.eventual_behavior == EVENTUALLY_ENTERS_STEADY_STATE) {
         m.throughput_cycles = steady_state.number_of_cycles;
         m.throughput_outputs = steady_state.number_of_outputs;
-        for (uint32_t i = 0; i < v->pf->number_of_inputs; i++) {
+        for (uint32_t i = 0; i < v->pf->number_of_inputs; ++i) {
             m.throughput_inputs_by_input[i] = steady_state.number_of_inputs_by_input[i];
         }
-        for (uint32_t i = 0; i < v->pf->number_of_outputs; i++) {
+        for (uint32_t i = 0; i < v->pf->number_of_outputs; ++i) {
             m.throughput_outputs_by_output[i] = steady_state.number_of_outputs_by_output[i];
         }
         m.throughput_linear_area = steady_state.linear_area_growth;

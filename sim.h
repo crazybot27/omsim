@@ -271,8 +271,8 @@ struct input_output {
     // the original index of this input or output in the solution file.
     uint32_t solution_index;
 
-    // the number of times this output has consumed something.
-    uint64_t number_of_outputs;
+    // the number of times this output has consumed something, or the number of times this input has spawned something.
+    uint64_t spawned_consumed;
 
     // normally, a repeating output only goes up to six repetitions.  but we
     // keep counting after that so throughput can be measured in the limit.
@@ -280,7 +280,7 @@ struct input_output {
     // multiple of six.  this variable tracks the number of repetitions the
     // footprint currently contains.
     uint32_t number_of_repetitions;
-    // how much should number_of_outputs go up for every matched repetition?
+    // how much should spawned_consumed go up for every matched repetition?
     uint32_t outputs_per_repetition;
 
     // in EXTEND_CHAIN mode, this field records the fastest rate at which a
