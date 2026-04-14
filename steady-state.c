@@ -153,6 +153,11 @@ static uint64_t gcd(uint64_t a, uint64_t b)
     return a;
 }
 
+static uint64_t lcm(uint64_t a, uint64_t b)
+{
+    return a/gcd(a,b)*b;
+}
+
 static struct vector chain_atom_direction(struct chain_atom *ca)
 {
     int32_t u = ca->current_position.u - ca->original_position.u;
@@ -374,7 +379,6 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                 disable_check_until_next_snapshot = true;
                 continue;
             }
-            uint64_t repeating_outputs = 1;
             uint64_t repeating_periods = 0;
             for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
                 struct input_output *io = &solution->inputs_and_outputs[i];
@@ -383,23 +387,41 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                 struct atom_at_position placeholder = io->original_atoms[io->number_of_original_atoms - 1];
                 int32_t offset = placeholder.position.u - io->repetition_origin.u;
                 if (offset <= 0 || placeholder.position.v != io->repetition_origin.v) {
-                    repeating_outputs = 0;
-                    repeating_periods = 1;
+                    repeating_periods = 0;
                     break;
                 }
-                if ((uint64_t)io->outputs_per_repetition * (uint64_t)io->maximum_feed_rate * repeating_periods < repeating_outputs * (uint64_t)offset) {
-                    repeating_outputs = (uint64_t)io->outputs_per_repetition * (uint64_t)io->maximum_feed_rate;
-                    repeating_periods = offset;
+                uint64_t periods_to_loop = (uint64_t)offset / gcd((uint64_t)io->maximum_feed_rate, (uint64_t)offset);
+                if (repeating_periods == 0) {
+                    repeating_periods = periods_to_loop;
+                } else if (repeating_periods % periods_to_loop != 0) {
+                    repeating_periods = lcm(repeating_periods, periods_to_loop);
                 }
             }
-            if (repeating_outputs < result.number_of_outputs * repeating_periods) {
-                uint64_t d = gcd(repeating_outputs, repeating_periods);
-                repeating_outputs /= d;
-                repeating_periods /= d;
-                result.number_of_outputs = repeating_outputs;
-                result.number_of_cycles *= repeating_periods;
-                if (repeating_periods % 2 == 0)
-                    result.pivot_parity = false;
+            if (repeating_periods != 0) {
+                if (repeating_periods > 1) {
+                    result.number_of_outputs *= repeating_periods;
+                    result.number_of_cycles *= repeating_periods;
+                    if (repeating_periods % 2 == 0)
+                        result.pivot_parity = false;
+                    for (uint32_t i = 0; i < number_of_inputs; ++i) {
+                        result.number_of_inputs_by_input[i] *= repeating_periods;
+                    }
+                    for (uint32_t i = 0; i < number_of_outputs; ++i) {
+                        result.number_of_outputs_by_output[i] *= repeating_periods;
+                    }
+                }
+                for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
+                    struct input_output *io = &solution->inputs_and_outputs[i];
+                    if (!(io->type & REPEATING_OUTPUT))
+                        continue;
+                    struct atom_at_position placeholder = io->original_atoms[io->number_of_original_atoms - 1];
+                    int32_t offset = placeholder.position.u - io->repetition_origin.u;
+                    uint64_t repetitions = (uint64_t)io->maximum_feed_rate * repeating_periods / offset;
+                    result.number_of_outputs_by_output[io->puzzle_index] = repetitions;
+                    if ((uint64_t)io->outputs_per_repetition * repetitions < result.number_of_outputs) {
+                        result.number_of_outputs = (uint64_t)io->outputs_per_repetition * repetitions;
+                    }
+                }
             }
             if (board->area_growth_order == GROWTH_LINEAR) {
                 uint64_t linear_area_growth = 0;
