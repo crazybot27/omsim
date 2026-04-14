@@ -21,11 +21,24 @@ static void schedule_flag_reset_if_needed(struct board *board, atom *a);
 
 static atom mark_used_area_with_overlap(struct board *board, struct vector point, uint64_t *overlap);
 
+static uint32_t vector_hexicab_length(struct vector p)
+{
+    return (abs(p.u) + abs(p.v) + abs(p.u + p.v)) / 2;
+}
+
 struct vector mechanism_relative_position(struct mechanism m, int32_t du, int32_t dv, int32_t w)
 {
     return (struct vector){
         m.direction_u.u * du + m.direction_v.u * dv + m.position.u * w,
         m.direction_u.v * du + m.direction_v.v * dv + m.position.v * w,
+    };
+}
+
+struct vector polymer_position_from_global_position(struct input_output *io, struct vector p)
+{
+    return (struct vector){
+        io->repetition_direction_v.v * (p.u - io->repetition_origin.u) - io->repetition_direction_v.u * (p.v - io->repetition_origin.v),
+        -io->repetition_direction_u.v * (p.u - io->repetition_origin.u) + io->repetition_direction_u.u * (p.v - io->repetition_origin.v),
     };
 }
 
@@ -1225,7 +1238,7 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
                     struct vector delta = ap->position;
                     delta.u -= base.u;
                     delta.v -= base.v;
-                    int32_t distance = (abs(delta.u) + abs(delta.v) + abs(delta.u + delta.v)) / 2;
+                    int32_t distance = vector_hexicab_length(delta);
                     if (distance > maximum_rotation_distance)
                         maximum_rotation_distance = distance;
                     rotate_bonds(&ap->atom, m->rotation);
@@ -1459,11 +1472,23 @@ static int32_t gcd(int32_t a, int32_t b)
     return a;
 }
 
+int32_t polymer_feed_rate_divisor(struct input_output *io)
+{
+    struct atom_at_position placeholder = io->original_atoms[io->number_of_original_atoms - 1];
+    return vector_hexicab_length((struct vector){
+        placeholder.position.u - io->repetition_origin.u,
+        placeholder.position.v - io->repetition_origin.v,
+    });
+}
+
 static void match_repeating_output_with_chain_atoms(struct board *board, struct input_output *io)
 {
     struct atom_at_position placeholder = io->original_atoms[io->number_of_original_atoms - 1];
-    int32_t offset = placeholder.position.u - io->repetition_origin.u;
-    if (offset <= 0 || placeholder.position.v != io->repetition_origin.v)
+    struct vector offset = {
+        placeholder.position.u - io->repetition_origin.u,
+        placeholder.position.v - io->repetition_origin.v,
+    };
+    if (offset.u == 0 && offset.v == 0)
         return;
     int32_t maximum_feed_rate = 0;
     for (uint32_t i = 0; i < io->number_of_original_atoms - 1; ++i) {
@@ -1473,7 +1498,8 @@ static void match_repeating_output_with_chain_atoms(struct board *board, struct 
         uint32_t repeats_after = UINT32_MAX;
         for (uint32_t j = REPEATING_OUTPUT_REPETITIONS; j < repeats_after; ++j) {
             struct vector p = output.position;
-            p.u += j * offset;
+            p.u += j * offset.u;
+            p.v += j * offset.v;
             atom a = *lookup_atom(board, p);
             if (!(a & VALID) || (a & REMOVED) || (a & IS_CHAIN_ATOM)) {
                 // look for a repeating chain atom that will fill in this hex.
@@ -1482,19 +1508,33 @@ static void match_repeating_output_with_chain_atoms(struct board *board, struct 
                     struct chain_atom ca = board->chain_atoms[k];
                     if (!ca.prev_in_list || !(ca.flags & CHAIN_ATOM_IN_REPEATING_SEGMENT))
                         continue;
-                    if (ca.current_position.v != p.v || ca.current_position.u > p.u)
+                    struct vector chain_offset = {
+                        ca.current_position.u - ca.original_position.u,
+                        ca.current_position.v - ca.original_position.v,
+                    };
+                    int32_t repetition = 0;
+                    if (chain_offset.u != 0)
+                        repetition = (p.u - ca.current_position.u) / chain_offset.u;
+                    else
+                        repetition = (p.v - ca.current_position.v) / chain_offset.v;
+                    if (repetition < 0)
                         continue;
-                    int32_t chain_offset = ca.current_position.u - ca.original_position.u;
-                    if (chain_offset <= 0 || ca.current_position.v != ca.original_position.v)
+                    if (ca.current_position.u + repetition * chain_offset.u != p.u)
                         continue;
-                    if ((p.u - ca.current_position.u) % chain_offset != 0)
+                    if (ca.current_position.v + repetition * chain_offset.v != p.v)
                         continue;
-                    // we only have to check up to the offset where this chain
-                    // atom appears in the same spot in the output.
-                    if (repeats_after == UINT32_MAX)
-                        repeats_after = j + chain_offset / gcd(offset, chain_offset);
-                    if (chain_offset > maximum_feed_rate)
-                        maximum_feed_rate = chain_offset;
+
+                    if (repeats_after == UINT32_MAX) {
+                        // we only have to check up to the offset where this chain
+                        // atom appears in the same spot in the output.
+                        if (chain_offset.u != 0)
+                            repeats_after = j + chain_offset.u / gcd(offset.u, chain_offset.u);
+                        else
+                            repeats_after = j + chain_offset.v / gcd(offset.v, chain_offset.v);
+                    }
+                    int32_t feed_rate = vector_hexicab_length(chain_offset);
+                    if (feed_rate > maximum_feed_rate)
+                        maximum_feed_rate = feed_rate;
                     found_chain_atom = true;
                     a = *lookup_atom(board, ca.current_position);
                     break;
@@ -1513,6 +1553,7 @@ static void match_repeating_output_with_chain_atoms(struct board *board, struct 
 
 static bool is_ignored_output_position(struct input_output *io, struct vector pos)
 {
+    pos = polymer_position_from_global_position(io, pos);
     // atoms cannot appear outside the vertical bounds of the
     // infinite product.
     if (pos.v < io->min_v || pos.v > io->max_v)

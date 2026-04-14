@@ -367,16 +367,15 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                 struct input_output *io = &solution->inputs_and_outputs[i];
                 if (!(io->type & REPEATING_OUTPUT))
                     continue;
-                struct atom_at_position placeholder = io->original_atoms[io->number_of_original_atoms - 1];
-                int32_t offset = placeholder.position.u - io->repetition_origin.u;
-                if (offset <= 0 || placeholder.position.v != io->repetition_origin.v) {
+                int32_t divisor = polymer_feed_rate_divisor(io);
+                if (divisor <= 0) {
                     repeating_outputs = 0;
                     repeating_periods = 1;
                     break;
                 }
-                if ((uint64_t)io->outputs_per_repetition * (uint64_t)io->maximum_feed_rate * repeating_periods < repeating_outputs * (uint64_t)offset) {
+                if ((uint64_t)io->outputs_per_repetition * (uint64_t)io->maximum_feed_rate * repeating_periods < repeating_outputs * (uint64_t)divisor) {
                     repeating_outputs = (uint64_t)io->outputs_per_repetition * (uint64_t)io->maximum_feed_rate;
-                    repeating_periods = offset;
+                    repeating_periods = divisor;
                 }
             }
             if (repeating_outputs < result.number_of_outputs * repeating_periods) {

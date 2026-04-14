@@ -288,6 +288,9 @@ struct input_output {
 
     // where the repeated atoms will be attached to the repetition placeholder.
     struct vector repetition_origin;
+    // the direction of repetition (important for rotated polymers).
+    struct vector repetition_direction_u;
+    struct vector repetition_direction_v;
 
     // bounding box information for repeating outputs.
     int32_t min_v;
@@ -564,5 +567,8 @@ int direction_for_offset(struct vector d);
 int angular_distance_between_grabbers(uint32_t mechanism_type);
 struct vector mechanism_relative_position(struct mechanism m, int32_t du, int32_t dv, int32_t w);
 atom bond_direction(struct mechanism m, int32_t du, int32_t dv);
+
+struct vector polymer_position_from_global_position(struct input_output *io, struct vector p);
+int32_t polymer_feed_rate_divisor(struct input_output *io);
 
 #endif

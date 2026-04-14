@@ -516,7 +516,7 @@ static bool repeat_molecule(struct input_output *io, const char **error)
     for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
         if (io->atoms[j].atom & REPEATING_OUTPUT_PLACEHOLDER)
             continue;
-        struct vector p = io->atoms[j].position;
+        struct vector p = polymer_position_from_global_position(io, io->atoms[j].position);
         if (p.v < io->min_v)
             io->min_v = p.v;
         if (p.v > io->max_v)
@@ -536,7 +536,7 @@ static bool repeat_molecule(struct input_output *io, const char **error)
     for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
         if (io->atoms[j].atom & REPEATING_OUTPUT_PLACEHOLDER)
             continue;
-        struct vector p = io->atoms[j].position;
+        struct vector p = polymer_position_from_global_position(io, io->atoms[j].position);
         size_t row = p.v - io->min_v;
         if (p.u < io->row_min_u[row])
             io->row_min_u[row] = p.u;
@@ -546,7 +546,7 @@ static bool repeat_molecule(struct input_output *io, const char **error)
     for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
         if (io->atoms[j].atom & REPEATING_OUTPUT_PLACEHOLDER)
             continue;
-        struct vector p = io->atoms[j].position;
+        struct vector p = polymer_position_from_global_position(io, io->atoms[j].position);
         size_t row = p.v - io->min_v;
         if (p.u + 1 <= io->row_max_u[row])
             io->atoms[j].atom |= 1ULL << (RECENT_BOND + 0);
@@ -830,6 +830,8 @@ bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct s
             io->atoms = 0;
             io->number_of_atoms = 0;
             io->repetition_origin = m.position;
+            io->repetition_direction_u = m.direction_u;
+            io->repetition_direction_v = m.direction_v;
             io->outputs_per_repetition = pf->output_scale;
             if (!repeat_molecule(io, error)) {
                 destroy(solution, 0);
