@@ -274,12 +274,6 @@ struct input_output {
     // the number of times this output has consumed something, or the number of times this input has spawned something.
     uint64_t spawned_consumed;
 
-    // normally, a repeating output only goes up to six repetitions.  but we
-    // keep counting after that so throughput can be measured in the limit.
-    // that means extending the footprint of the output every time we hit a new
-    // multiple of six.  this variable tracks the number of repetitions the
-    // footprint currently contains.
-    uint32_t number_of_repetitions;
     // how much should spawned_consumed go up for every matched repetition?
     uint32_t outputs_per_repetition;
 
@@ -294,6 +288,9 @@ struct input_output {
 
     // where the repeated atoms will be attached to the repetition placeholder.
     struct vector repetition_origin;
+    // the direction of repetition (important for rotated polymers).
+    struct vector repetition_direction_u;
+    struct vector repetition_direction_v;
 
     // bounding box information for repeating outputs.
     int32_t min_v;
@@ -560,10 +557,6 @@ void add_chain_atom_to_table(struct board *board, uint32_t chain_atom_index);
 uint32_t lookup_chain_atom(struct board *board, struct vector query);
 void move_chain_atom_to_list(struct board *board, uint32_t chain_atom_index, uint32_t *list);
 
-// used during decoding.
-bool repeat_molecule(struct input_output *io, uint32_t number_of_repetitions,
- const char **error);
-
 // the origin is always the last vector in the footprint of a glyph.
 const struct vector *glyph_footprint(uint32_t mechanism_type);
 
@@ -574,5 +567,8 @@ int direction_for_offset(struct vector d);
 int angular_distance_between_grabbers(uint32_t mechanism_type);
 struct vector mechanism_relative_position(struct mechanism m, int32_t du, int32_t dv, int32_t w);
 atom bond_direction(struct mechanism m, int32_t du, int32_t dv);
+
+struct vector polymer_position_from_global_position(struct input_output *io, struct vector p);
+int32_t polymer_feed_rate_divisor(struct input_output *io);
 
 #endif
