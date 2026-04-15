@@ -386,11 +386,10 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                     continue;
                 int32_t divisor = polymer_feed_rate_divisor(io);
                 if (divisor <= 0) {
-                    repeating_outputs = 0;
                     repeating_periods = 1;
                     break;
                 }
-                uint64_t periods_to_loop = (uint64_t)offset / gcd((uint64_t)io->maximum_feed_rate, (uint64_t)offset);
+                uint64_t periods_to_loop = (uint64_t)divisor / gcd((uint64_t)io->maximum_feed_rate, (uint64_t)divisor);
                 if (repeating_periods == 0) {
                     repeating_periods = periods_to_loop;
                 } else if (repeating_periods % periods_to_loop != 0) {
@@ -414,9 +413,8 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                     struct input_output *io = &solution->inputs_and_outputs[i];
                     if (!(io->type & REPEATING_OUTPUT))
                         continue;
-                    struct atom_at_position placeholder = io->original_atoms[io->number_of_original_atoms - 1];
-                    int32_t offset = placeholder.position.u - io->repetition_origin.u;
-                    uint64_t repetitions = (uint64_t)io->maximum_feed_rate * repeating_periods / offset;
+                    int32_t divisor = polymer_feed_rate_divisor(io);
+                    uint64_t repetitions = (uint64_t)io->maximum_feed_rate * repeating_periods / divisor;
                     result.number_of_outputs_by_output[io->puzzle_index] = repetitions;
                     if ((uint64_t)io->outputs_per_repetition * repetitions < result.number_of_outputs) {
                         result.number_of_outputs = (uint64_t)io->outputs_per_repetition * repetitions;
