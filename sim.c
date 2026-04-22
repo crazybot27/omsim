@@ -1123,6 +1123,7 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             m->direction_u = nu;
             m->direction_v = nv;
             m->arm_rotation++;
+            m->arm_rotation %= 6;
             break;
         }
         case 'd': { // rotate cw
@@ -1139,6 +1140,7 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             m->direction_u = nu;
             m->direction_v = nv;
             m->arm_rotation--;
+            m->arm_rotation %= 6;
             break;
         }
         case 'w': // extend piston
@@ -1166,11 +1168,6 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
         default:
             break;
         }
-        // the weird (uint32_t)-(int64_t) thing is to handle the INT_MIN case.
-        if (m->arm_rotation > 0 && (uint32_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
-            solution->maximum_absolute_arm_rotation = (uint32_t)m->arm_rotation;
-        else if (m->arm_rotation < 0 && (uint32_t)-(int64_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
-            solution->maximum_absolute_arm_rotation = (uint32_t)-(int64_t)m->arm_rotation;
     }
     // carry out deferred movements.
     if (board->half_cycle == 2) {
@@ -1275,8 +1272,10 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
                 m->grabber_offset.v = g.v ? g.v * (m->grabber_offset.v / g.v + m->piston_extension) : 0;
             }
             apply_movement_to_position(base, m->translation, u, v, &m->absolute_grab_position);
-            if ((m->type & 3) == SWING_MOVEMENT)
+            if ((m->type & 3) == SWING_MOVEMENT) {
                 m->base_rotation += m->rotation;
+                m->base_rotation %= 6;
+            }
         }
         double collision_increment = 0.25 / pow(2, round(log(maximum_rotation_distance) / log(2)));
         if (!(collision_increment <= 0.125))

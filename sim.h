@@ -320,10 +320,6 @@ struct solution {
     size_t *arm_tape_halt_index;
     size_t number_of_arms;
 
-    // the maximum absolute value of all arm rotation amounts over all cycles.
-    // used to detect "overclocking".
-    uint32_t maximum_absolute_arm_rotation;
-
     // how many cycles until each tape loops back to the beginning.
     uint64_t tape_period;
 

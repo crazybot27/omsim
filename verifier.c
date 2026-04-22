@@ -82,7 +82,6 @@ struct per_cycle_measurements {
     int executed_instructions;
     int instruction_executions[NUMBER_OF_INSTRUCTIONS];
     int atom_grabs[NUMBER_OF_ATOM_TYPES];
-    int maximum_absolute_arm_rotation;
     int number_of_atoms[NUMBER_OF_ATOM_TYPES];
     struct error error;
     bool valid;
@@ -335,7 +334,6 @@ static struct per_cycle_measurements measure_at_current_cycle(struct verifier *v
         .executed_instructions = -1,
         .instruction_executions = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
         .atom_grabs = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
-        .maximum_absolute_arm_rotation = -1,
         .number_of_atoms = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
         .valid = true,
     };
@@ -348,12 +346,14 @@ static struct per_cycle_measurements measure_at_current_cycle(struct verifier *v
     } else if (!board->complete && check_completion) {
         error_measurements.error.description = "solution did not complete within cycle limit";
         return error_measurements;
+    } else if (board->cycle > (uint64_t)INT_MAX) {
+        error_measurements.error.description = "solution did not complete within cycle integer limit";
+        return error_measurements;
     }
     struct per_cycle_measurements m = {
         .cycles = (int)board->cycle,
         .area = used_area(board),
         .executed_instructions = 0,
-        .maximum_absolute_arm_rotation = solution ? solution->maximum_absolute_arm_rotation : -1,
         .valid = true,
     };
     struct area_dimension dimensions[] = {
@@ -522,8 +522,6 @@ static int lookup_per_cycle_metric(struct per_cycle_measurements *measurements, 
         return measurements->minimum_hexagon;
     else if (!strcmp(metric, "executed instructions"))
         return measurements->executed_instructions;
-    else if (!strcmp(metric, "maximum absolute arm rotation"))
-        return measurements->maximum_absolute_arm_rotation;
     else if (!strcmp(metric, "instruction executions")) {
         int value = 0;
         for (int i = 0; i < NUMBER_OF_INSTRUCTIONS; ++i)
@@ -662,7 +660,6 @@ static struct throughput_measurements measure_throughput(struct verifier *v)
         // xx these are unsupported right now.
         for (int i = 0; i < NUMBER_OF_ATOM_TYPES; ++i)
             m.steady_state.atom_grabs[i] = -1;
-        m.steady_state.maximum_absolute_arm_rotation = -1;
     } else
         m.error.description = "solution did not converge on a throughput";
 
