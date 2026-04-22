@@ -337,6 +337,9 @@ static struct per_cycle_measurements measure_at_current_cycle(struct verifier *v
     } else if (!board->complete && check_completion) {
         error_measurements.error.description = "solution did not complete within cycle limit";
         return error_measurements;
+    } else if (board->cycle > (uint64_t)INT_MAX) {
+        error_measurements.error.description = "solution did not complete within cycle integer limit";
+        return error_measurements;
     }
     struct per_cycle_measurements m = {
         .cycles = (int)board->cycle,
