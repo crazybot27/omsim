@@ -56,6 +56,9 @@ typedef uint64_t atom;
 // box.
 #define IS_CHAIN_ATOM (1ULL << 21)
 
+// does this atom have disjoint bonds which must be looked up?
+#define HAS_DISJOINT_BOND (1ULL << 22)
+
 // is this atom being grabbed?  prevents output and consumption by glyphs.  the
 // full 5-bit value is the number of times the atom has been grabbed (this is
 // necessary to keep track of multiple simultaneous grabs).
@@ -209,6 +212,17 @@ struct mechanism {
     int pivot_parity;
 };
 
+
+struct disjoint_bond {
+    struct vector from_position;
+    struct vector to_position;
+};
+struct disjoint_bond_table {
+    struct disjoint_bond *bonds;
+    uint32_t size;
+    uint32_t count;
+};
+
 struct conduit {
     // the index of the glyph associated with this conduit.
     uint32_t glyph_index;
@@ -231,6 +245,9 @@ struct conduit {
     // while positions are transformed into the conduit glyph's coordinate
     // space.
     struct atom_at_position *atoms;
+
+    // disjoint bonds going through a conduit are stored here.
+    struct disjoint_bond_table disjoint_bond_table;
 
     // the number of atoms in each molecule in the conduit.
     uint32_t *molecule_lengths;
@@ -265,6 +282,9 @@ struct input_output {
     struct atom_at_position *atoms;
     uint32_t number_of_atoms;
     uint32_t center_atom_index;
+
+    struct disjoint_bond *disjoint_bonds;
+    uint32_t number_of_disjoint_bonds;
 
     // the original index of this input or output in the puzzle file.
     uint32_t puzzle_index;
@@ -385,6 +405,12 @@ struct movement {
     // linked list of chain_atom structs corresponding to atoms
     // involved in this movement.
     uint32_t first_chain_atom;
+
+    // disjoint bonds for atoms in the movement.  the fields of the bonds
+    // are modified during the movement, so it can't be used as a hash table
+    // after insertion.  really we're just using `struct disjoint_bond_table`
+    // to save having to write yet another array insertion function...
+    struct disjoint_bond_table disjoint_bonds;
 };
 
 struct movement_list {
@@ -499,6 +525,8 @@ struct board {
     enum growth_order area_growth_order;
     struct linear_area_direction *area_directions;
     uint32_t number_of_area_directions;
+
+    struct disjoint_bond_table disjoint_bond_table;
 
     // records each cycle the output count increases toward completion.
     // a cycle on which the output count increased multiple times will appear

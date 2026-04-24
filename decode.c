@@ -198,6 +198,62 @@ static int compare_conduits_by_id(const void *aa, const void *bb)
     return 0;
 }
 
+static void create_disjoint_bonds(struct input_output *io)
+{
+    uint32_t *disjoint_bond_path = calloc(io->number_of_atoms, sizeof(uint32_t));
+    uint32_t *stack = calloc(io->number_of_atoms, sizeof(uint32_t));
+    uint32_t stack_depth = 0;
+    for (uint32_t i = 0; i < io->number_of_atoms; ++i) {
+        // search for an unvisited atom
+        struct atom_at_position *a = &io->atoms[i];
+        if (a->atom & VISITED)
+            continue;
+        // visit and add it to the disjoint bond path
+        a->atom |= VISITED;
+        stack[stack_depth++] = i;
+        disjoint_bond_path[io->number_of_disjoint_bonds++] = i;
+        // floodfill the connected atoms
+        while (stack_depth > 0) {
+            struct atom_at_position *a = &io->atoms[stack[--stack_depth]];
+            for (int bond_direction = 0; bond_direction < 6; ++bond_direction) {
+                atom ab = (BOND_LOW_BITS & ~RECENT_BONDS) << bond_direction;
+                if (!(a->atom & ab))
+                    continue;
+                struct vector d = u_offset_for_direction(bond_direction);
+                struct vector p = { a->position.u + d.u, a->position.v + d.v };
+                for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
+                    struct atom_at_position *b = &io->atoms[j];
+                    if (vectors_equal(b->position, p)) {
+                        if (!(b->atom & VISITED)) {
+                            b->atom |= VISITED;
+                            stack[stack_depth++] = j;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (io->number_of_disjoint_bonds == 1) {
+        // if the molecule is fully connected, no disjoint bonds
+        io->number_of_disjoint_bonds = 0;
+    }
+    // make disjoint bonds in a ring consisting of one atom in each disjoint component.
+    io->disjoint_bonds = calloc(io->number_of_disjoint_bonds, sizeof(io->disjoint_bonds[0]));
+    for (uint32_t i = 0; i < io->number_of_disjoint_bonds; ++i) {
+        io->disjoint_bonds[i].from_position = io->atoms[disjoint_bond_path[i]].position;
+        io->atoms[disjoint_bond_path[i]].atom |= HAS_DISJOINT_BOND;
+        if (i == io->number_of_disjoint_bonds - 1)
+            io->disjoint_bonds[i].to_position = io->atoms[disjoint_bond_path[0]].position;
+        else
+            io->disjoint_bonds[i].to_position = io->atoms[disjoint_bond_path[i + 1]].position;
+    }
+    for (uint32_t i = 0; i < io->number_of_atoms; ++i)
+        io->atoms[i].atom &= ~VISITED;
+    free(disjoint_bond_path);
+    free(stack);
+}
+
 static void decode_molecule(struct puzzle_molecule c, struct mechanism m, struct input_output *io)
 {
     io->atoms = calloc(c.number_of_atoms, sizeof(io->atoms[0]));
@@ -788,6 +844,7 @@ bool decode_solution(struct solution *solution, struct puzzle_file *pf, struct s
             io->puzzle_index = part.which_input_or_output;
             io->solution_index = i;
             decode_molecule(c, m, io);
+            create_disjoint_bonds(io);
             io_index--;
             mark_visible_input_output(solution, io);
         } else if (byte_string_is(part.name, "out-std")) {

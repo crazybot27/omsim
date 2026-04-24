@@ -21,6 +21,12 @@ static void schedule_flag_reset_if_needed(struct board *board, atom *a);
 
 static atom mark_used_area_with_overlap(struct board *board, struct vector point, uint64_t *overlap);
 
+static void insert_disjoint_bond(struct disjoint_bond_table *table, struct disjoint_bond bond);
+static struct disjoint_bond lookup_disjoint_bond(struct disjoint_bond_table *table, struct vector query);
+static void remove_disjoint_bond(struct disjoint_bond_table *table, struct vector position);
+static const struct disjoint_bond uninitialized_disjoint_bond;
+static const struct disjoint_bond removed_disjoint_bond = { { 0, 1 }, { 0, 1 } };
+
 static uint32_t vector_hexicab_length(struct vector p)
 {
     return (abs(p.u) + abs(p.v) + abs(p.u + p.v)) / 2;
@@ -31,6 +37,14 @@ struct vector mechanism_relative_position(struct mechanism m, int32_t du, int32_
     return (struct vector){
         m.direction_u.u * du + m.direction_v.u * dv + m.position.u * w,
         m.direction_u.v * du + m.direction_v.v * dv + m.position.v * w,
+    };
+}
+
+struct vector position_within_mechanism(struct mechanism m, int32_t u, int32_t v, int32_t w)
+{
+    return (struct vector){
+        (u - m.position.u * w) * m.direction_v.v - (v - m.position.v * w) * m.direction_v.u,
+        (v - m.position.v * w) * m.direction_u.u - (u - m.position.u * w) * m.direction_u.v,
     };
 }
 
@@ -101,7 +115,7 @@ static struct atom_ref_at_position conversion_input(struct board *board, struct 
     static const atom empty;
     struct atom_ref_at_position input = get_atom(board, m, du, dv);
     // conversion glyphs can't see bonded or grabbed inputs.
-    if (*input.atom & (ALL_BONDS | GRABBED))
+    if (*input.atom & (ALL_BONDS | HAS_DISJOINT_BOND | GRABBED))
         return (struct atom_ref_at_position){ (atom *)&empty, input.position };
     return input;
 }
@@ -299,6 +313,14 @@ static void apply_conduit(struct solution *solution, struct board *board, struct
                 struct vector delta = conduit->atoms[base + k].position;
                 struct vector p = mechanism_relative_position(m, delta.u, delta.v, 1);
                 atom *a = lookup_atom(board, p);
+                if (*a & HAS_DISJOINT_BOND) {
+                    struct disjoint_bond bond = lookup_disjoint_bond(&board->disjoint_bond_table, p);
+                    remove_disjoint_bond(&board->disjoint_bond_table, p);
+                    bond.from_position = mechanism_relative_position(other_side, delta.u, delta.v, 1);
+                    struct vector to_delta = position_within_mechanism(m, bond.to_position.u, bond.to_position.v, 1);
+                    bond.to_position = mechanism_relative_position(other_side, to_delta.u, to_delta.v, 1);
+                    insert_disjoint_bond(&conduit->disjoint_bond_table, bond);
+                }
                 if (consume) {
                     conduit->atoms[base + k].atom = *a & ~OVERLAPS_ATOMS;
                     remove_atom(board, (struct atom_ref_at_position){ a, p });
@@ -325,6 +347,13 @@ static void apply_conduit(struct solution *solution, struct board *board, struct
             }
             base += length;
         }
+        for (uint32_t j = 0; j < conduit->disjoint_bond_table.size; ++j) {
+            struct disjoint_bond bond = conduit->disjoint_bond_table.bonds[j];
+            if (!vectors_equal(bond.from_position, bond.to_position))
+                insert_disjoint_bond(&board->disjoint_bond_table, bond);
+            conduit->disjoint_bond_table.bonds[j] = uninitialized_disjoint_bond;
+        }
+        conduit->disjoint_bond_table.count = 0;
     }
 }
 
@@ -407,6 +436,14 @@ static struct molecule *get_molecule(struct board *board, struct atom_ref_at_pos
             if (b.atom)
                 add_atom_to_molecule(board, &board->molecule, b);
         }
+        if (*a.atom & HAS_DISJOINT_BOND) {
+            struct disjoint_bond bond = lookup_disjoint_bond(&board->disjoint_bond_table, a.position);
+            struct atom_ref_at_position b = { lookup_atom(board, bond.to_position), bond.to_position };
+            if (!(*b.atom & VISITED)) {
+                *b.atom |= VISITED;
+                add_atom_to_molecule(board, &board->molecule, b);
+            }
+        }
     }
     for (uint32_t i = 0; i < board->molecule.size; ++i)
         *lookup_atom(board, board->molecule.atoms[i].position) &= ~VISITED;
@@ -473,7 +510,7 @@ static void apply_glyphs(struct solution *solution, struct board *board)
             struct atom_ref_at_position q = get_atom(board, m, 0, 0);
             struct atom_ref_at_position a = get_atom(board, m, 1, 0);
             atom metal = *a.atom & ANY_METAL & ~GOLD;
-            if (metal && !(*q.atom & ALL_BONDS) && !(*q.atom & GRABBED) && (*q.atom & QUICKSILVER)) {
+            if (metal && !(*q.atom & ALL_BONDS) && !(*q.atom & HAS_DISJOINT_BOND) && !(*q.atom & GRABBED) && (*q.atom & QUICKSILVER)) {
                 remove_atom(board, q);
                 transform_atom(a.atom, metal >> 1);
             }
@@ -557,6 +594,19 @@ static void apply_glyphs(struct solution *solution, struct board *board)
                 // record the bond in the RECENT_BONDS bitfield to prevent the
                 // atoms from being consumed during this half-cycle.
                 if ((*a.atom & ab & ~RECENT_BONDS) && (*b.atom & ba & ~RECENT_BONDS)) {
+
+                    // remove disjoint bonds when debonding
+                    if (board->disjoint_bond_table.count > 0) {
+                        struct molecule *molecule = get_molecule(board, a);
+                        for (uint32_t i = 0; i < molecule->size; ++i) {
+                            struct atom_ref_at_position p = molecule->atoms[i];
+                            if (*p.atom & HAS_DISJOINT_BOND) {
+                                remove_disjoint_bond(&board->disjoint_bond_table, p.position);
+                                *p.atom &= ~HAS_DISJOINT_BOND;
+                            }
+                        }
+                    }
+
                     *a.atom &= ~ab;
                     *a.atom |= ab & RECENT_BONDS;
                     schedule_flag_reset_if_needed(board, a.atom);
@@ -564,6 +614,7 @@ static void apply_glyphs(struct solution *solution, struct board *board)
                     *b.atom &= ~ba;
                     *b.atom |= ba & RECENT_BONDS;
                     schedule_flag_reset_if_needed(board, b.atom);
+
                 }
             }
             break;
@@ -595,7 +646,7 @@ static void apply_glyphs(struct solution *solution, struct board *board)
         }
         case DISPOSAL: {
             struct atom_ref_at_position a = get_atom(board, m, 0, 0);
-            if (*a.atom && !(*a.atom & ALL_BONDS) && !(*a.atom & GRABBED))
+            if (*a.atom && !(*a.atom & ALL_BONDS) && !(*a.atom & HAS_DISJOINT_BOND) && !(*a.atom & GRABBED))
                 remove_atom(board, a);
             break;
         }
@@ -886,6 +937,14 @@ static void move_atoms(struct board *board, atom *a, struct movement movement)
             if (!(*b & VALID) || (*b & REMOVED))
                 continue;
             move_atom(board, b, p, movement_index, &movement.first_chain_atom);
+        }
+        if (m.atom & HAS_DISJOINT_BOND) {
+            struct disjoint_bond bond = lookup_disjoint_bond(&board->disjoint_bond_table, m.position);
+            remove_disjoint_bond(&board->disjoint_bond_table, m.position);
+            insert_disjoint_bond(&movement.disjoint_bonds, bond);
+            atom *b = lookup_atom(board, bond.to_position);
+            if ((*b & VALID) && !(*b & REMOVED))
+                move_atom(board, b, bond.to_position, movement_index, &movement.first_chain_atom);
         }
         board->moving_atoms.cursor++;
     }
@@ -1263,6 +1322,12 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
                 }
                 chain = ca->next_in_list;
             }
+            for (uint32_t j = 0; j < m->disjoint_bonds.size; ++j) {
+                struct disjoint_bond *bond = &m->disjoint_bonds.bonds[j];
+                // this makes `m->disjoint_bonds` no longer a hash table.
+                apply_movement_to_position(base, m->translation, u, v, &bond->from_position);
+                apply_movement_to_position(base, m->translation, u, v, &bond->to_position);
+            }
             if ((m->type & 3) == TRACK_MOVEMENT) {
                 m->base.u += m->translation.u;
                 m->base.v += m->translation.v;
@@ -1309,6 +1374,14 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
                     add_chain_atom_to_table(board, chain);
                 chain = ca.next_in_list;
             }
+            for (uint32_t j = 0; j < m.disjoint_bonds.size; ++j) {
+                struct disjoint_bond bond = m.disjoint_bonds.bonds[j];
+                if (vectors_equal(bond.from_position, bond.to_position))
+                    continue;
+                insert_disjoint_bond(&board->disjoint_bond_table, bond);
+            }
+            free(m.disjoint_bonds.bonds);
+            m.disjoint_bonds.size = 0;
         }
     }
 }
@@ -1361,6 +1434,21 @@ static bool fill_conduit_molecule(struct solution *solution, struct board *board
             conduit->atoms[*atom_next].position = p;
             (*atom_next)++;
             *a |= VISITED;
+        }
+        if (ap.atom & HAS_DISJOINT_BOND) {
+            struct disjoint_bond bond = lookup_disjoint_bond(&board->disjoint_bond_table, mechanism_relative_position(m, ap.position.u, ap.position.v, 1));
+            if (!vectors_equal(bond.from_position, bond.to_position)) {
+                atom *a = lookup_atom(board, bond.to_position);
+                if ((*a & VALID) && !(*a & REMOVED) && !(*a & VISITED)) {
+                    if (!(*a & CONDUIT_SHAPE) || (*a & GRABBED))
+                        return false;
+                    conduit->atoms[*atom_next].atom = *a & ~BEING_DROPPED & ~CONDUIT_SHAPE;
+                    struct vector p = position_within_mechanism(m, bond.to_position.u, bond.to_position.v, 1);
+                    conduit->atoms[*atom_next].position = p;
+                    (*atom_next)++;
+                    *a |= VISITED;
+                }
+            }
         }
         (*atom_cursor)++;
     }
@@ -1452,12 +1540,13 @@ static void spawn_inputs(struct solution *solution, struct board *board)
         struct input_output *io = &solution->inputs_and_outputs[i];
         if (!(io->type & INPUT) || (io->type & BLOCKED))
             continue;
-        uint32_t n = io->number_of_atoms;
-        for (uint32_t j = 0; j < n; ++j) {
+        for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
             atom input = io->atoms[j].atom;
             struct vector p = io->atoms[j].position;
             insert_atom(board, p, VALID | input);
         }
+        for (uint32_t j = 0; j < io->number_of_disjoint_bonds; ++j)
+            insert_disjoint_bond(&board->disjoint_bond_table, io->disjoint_bonds[j]);
     }
 }
 
@@ -1635,6 +1724,11 @@ static void consume_output(struct solution *solution, struct board *board, struc
         if (board->chain_mode == EXTEND_CHAIN)
             match_repeating_output_with_chain_atoms(board, io);
     } else {
+        for (uint32_t i = 0; i < molecule->size; ++i) {
+            struct atom_ref_at_position a = molecule->atoms[i];
+            if (*a.atom & HAS_DISJOINT_BOND)
+                remove_disjoint_bond(&board->disjoint_bond_table, a.position);
+        }
         remove_molecule(board, molecule);
         io->number_of_outputs++;
     }
@@ -1973,12 +2067,15 @@ void destroy(struct solution *solution, struct board *board)
             free(solution->conduits[i].positions);
             free(solution->conduits[i].atoms);
             free(solution->conduits[i].molecule_lengths);
+            free(solution->conduits[i].disjoint_bond_table.bonds);
         }
         free(solution->conduits);
         free(solution->cabinet_walls);
         for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
-            if (solution->inputs_and_outputs[i].original_atoms != solution->inputs_and_outputs[i].atoms)
+            if (solution->inputs_and_outputs[i].original_atoms != solution->inputs_and_outputs[i].atoms) {
                 free(solution->inputs_and_outputs[i].original_atoms);
+                free(solution->inputs_and_outputs[i].disjoint_bonds);
+            }
             free(solution->inputs_and_outputs[i].atoms);
             free(solution->inputs_and_outputs[i].row_min_u);
             free(solution->inputs_and_outputs[i].row_max_u);
@@ -1997,6 +2094,7 @@ void destroy(struct solution *solution, struct board *board)
         free(board->output_cycles);
         for (uint32_t i = 0; i < board->number_of_area_directions; ++i)
             free(board->area_directions[i].footprint_at_infinity.atoms_at_positions);
+        free(board->disjoint_bond_table.bonds);
         free(board->area_directions);
         free(board->molecule.atoms);
         memset(board, 0, sizeof(*board));
@@ -2075,6 +2173,62 @@ uint32_t lookup_chain_atom(struct board *board, struct vector query)
         index = board->chain_atoms[index].next_in_list;
     }
     return index;
+}
+static bool disjoint_bonds_equal(struct disjoint_bond a, struct disjoint_bond b)
+{
+    return vectors_equal(a.from_position, b.from_position) && vectors_equal(a.to_position, b.to_position);
+}
+static struct disjoint_bond *lookup_disjoint_bond_slot(struct disjoint_bond_table *table, struct vector query, bool for_insertion)
+{
+    if (table->size == 0)
+        return (struct disjoint_bond *)&uninitialized_disjoint_bond;
+    uint32_t hash = vector_hash(query);
+    uint32_t mask = table->size - 1;
+    uint32_t index = hash & mask;
+    while (true) {
+        struct disjoint_bond *bond = &table->bonds[index];
+        if (disjoint_bonds_equal(*bond, uninitialized_disjoint_bond)) {
+            if (for_insertion)
+                table->count++;
+            return bond;
+        }
+        if (disjoint_bonds_equal(*bond, removed_disjoint_bond)) {
+            if (for_insertion)
+                return bond;
+        } else if (vectors_equal(bond->from_position, query))
+            return bond;
+        index = (index + 1) & mask;
+    }
+    return (struct disjoint_bond *)&uninitialized_disjoint_bond;
+}
+static struct disjoint_bond lookup_disjoint_bond(struct disjoint_bond_table *table, struct vector query)
+{
+    return *lookup_disjoint_bond_slot(table, query, false);
+}
+static void insert_disjoint_bond(struct disjoint_bond_table *table, struct disjoint_bond bond)
+{
+    if (table->count >= table->size / 2) {
+        uint32_t old_size = table->size;
+        table->size *= 2;
+        if (table->size < 16)
+            table->size = 16;
+        struct disjoint_bond *old = table->bonds;
+        table->bonds = calloc(table->size, sizeof(struct disjoint_bond));
+        table->count = 0;
+        for (uint32_t i = 0; i < old_size; ++i) {
+            struct disjoint_bond old_bond = old[i];
+            if (vectors_equal(old_bond.from_position, old_bond.to_position))
+                continue;
+            table->count++;
+            *lookup_disjoint_bond_slot(table, old_bond.from_position, true) = old_bond;
+        }
+        free(old);
+    }
+    *lookup_disjoint_bond_slot(table, bond.from_position, true) = bond;
+}
+static void remove_disjoint_bond(struct disjoint_bond_table *table, struct vector position)
+{
+    *lookup_disjoint_bond_slot(table, position, false) = removed_disjoint_bond;
 }
 
 static struct atom_at_position *lookup_atom_at_position_in_array(struct atom_grid *grid, struct vector query)
