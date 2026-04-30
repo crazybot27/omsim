@@ -291,10 +291,10 @@ struct input_output {
     // the original index of this input or output in the solution file.
     uint32_t solution_index;
 
-    // the number of times this output has consumed something.
-    uint64_t number_of_outputs;
+    // the number of times this output has consumed something, or the number of times this input has spawned something.
+    uint64_t spawned_consumed;
 
-    // how much should number_of_outputs go up for every matched repetition?
+    // how much should spawned_consumed go up for every matched repetition?
     uint32_t outputs_per_repetition;
 
     // in EXTEND_CHAIN mode, this field records the fastest rate at which a

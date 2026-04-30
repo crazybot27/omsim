@@ -1182,7 +1182,6 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             m->direction_u = nu;
             m->direction_v = nv;
             m->arm_rotation++;
-            m->arm_rotation %= 6;
             break;
         }
         case 'd': { // rotate cw
@@ -1199,7 +1198,6 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             m->direction_u = nu;
             m->direction_v = nv;
             m->arm_rotation--;
-            m->arm_rotation %= 6;
             break;
         }
         case 'w': // extend piston
@@ -1227,6 +1225,11 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
         default:
             break;
         }
+        // the weird (uint32_t)-(int64_t) thing is to handle the INT_MIN case.
+        if (m->arm_rotation > 0 && (uint32_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
+            solution->maximum_absolute_arm_rotation = (uint32_t)m->arm_rotation;
+        else if (m->arm_rotation < 0 && (uint32_t)-(int64_t)m->arm_rotation > solution->maximum_absolute_arm_rotation)
+            solution->maximum_absolute_arm_rotation = (uint32_t)-(int64_t)m->arm_rotation;
     }
     // carry out deferred movements.
     if (board->half_cycle == 2) {
@@ -1337,10 +1340,8 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
                 m->grabber_offset.v = g.v ? g.v * (m->grabber_offset.v / g.v + m->piston_extension) : 0;
             }
             apply_movement_to_position(base, m->translation, u, v, &m->absolute_grab_position);
-            if ((m->type & 3) == SWING_MOVEMENT) {
+            if ((m->type & 3) == SWING_MOVEMENT)
                 m->base_rotation += m->rotation;
-                m->base_rotation %= 6;
-            }
         }
         double collision_increment = 0.25 / pow(2, round(log(maximum_rotation_distance) / log(2)));
         if (!(collision_increment <= 0.125))
@@ -1540,6 +1541,7 @@ static void spawn_inputs(struct solution *solution, struct board *board)
         struct input_output *io = &solution->inputs_and_outputs[i];
         if (!(io->type & INPUT) || (io->type & BLOCKED))
             continue;
+        io->spawned_consumed++;
         for (uint32_t j = 0; j < io->number_of_atoms; ++j) {
             atom input = io->atoms[j].atom;
             struct vector p = io->atoms[j].position;
@@ -1720,7 +1722,7 @@ static void consume_output(struct solution *solution, struct board *board, struc
 
     // if the output is a match remove the output and increment the output counter.
     if (repeating) {
-        io->number_of_outputs = REPEATING_OUTPUT_REPETITIONS * io->outputs_per_repetition;
+        io->spawned_consumed = REPEATING_OUTPUT_REPETITIONS * io->outputs_per_repetition;
         if (board->chain_mode == EXTEND_CHAIN)
             match_repeating_output_with_chain_atoms(board, io);
     } else {
@@ -1730,7 +1732,7 @@ static void consume_output(struct solution *solution, struct board *board, struc
                 remove_disjoint_bond(&board->disjoint_bond_table, a.position);
         }
         remove_molecule(board, molecule);
-        io->number_of_outputs++;
+        io->spawned_consumed++;
     }
 }
 
@@ -1758,7 +1760,7 @@ static void check_completion(struct solution *solution, struct board *board)
     for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
         if (!(solution->inputs_and_outputs[i].type & OUTPUT))
             continue;
-        uint64_t count = solution->inputs_and_outputs[i].number_of_outputs;
+        uint64_t count = solution->inputs_and_outputs[i].spawned_consumed;
         if (count < min)
             min = count;
     }

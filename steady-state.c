@@ -50,7 +50,7 @@ static void take_snapshot(struct solution *solution, struct board *board, struct
     }
     snapshot->output_count = realloc(snapshot->output_count, sizeof(uint64_t) * solution->number_of_inputs_and_outputs);
     for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i)
-        snapshot->output_count[i] = solution->inputs_and_outputs[i].number_of_outputs;
+        snapshot->output_count[i] = solution->inputs_and_outputs[i].spawned_consumed;
 
     board->chain_atoms = realloc(board->chain_atoms, sizeof(struct chain_atom) * board->number_of_chain_atoms);
     board->chain_atom_table_size = 1;
@@ -153,6 +153,11 @@ static uint64_t gcd(uint64_t a, uint64_t b)
     return a;
 }
 
+static uint64_t lcm(uint64_t a, uint64_t b)
+{
+    return a/gcd(a,b)*b;
+}
+
 static struct vector chain_atom_direction(struct chain_atom *ca)
 {
     int32_t u = ca->current_position.u - ca->original_position.u;
@@ -236,7 +241,7 @@ static double measure_quadratic_swing_area(struct chain_swing *starting_point, i
     return atan2(SQRT3_2 * delta.direction.v, delta.direction.u + 0.5 * delta.direction.v) / M_PI * length_squared * 3;
 }
 
-struct steady_state run_until_steady_state(struct solution *solution, struct board *board, uint64_t cycle_limit)
+struct steady_state run_until_steady_state(struct solution *solution, struct board *board, uint32_t number_of_inputs, uint64_t cycle_limit)
 {
     struct snapshot snapshot = { 0 };
     uint64_t check_period = solution->tape_period;
@@ -258,9 +263,15 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
         if (!disable_check_until_next_snapshot && board->cycle % check_period == 0 && check_snapshot(solution, board, &snapshot)) {
             // printf("check passed on cycle %llu\n", board->cycle);
             uint64_t repetition_period_length = board->cycle - snapshot.cycle;
+            uint32_t number_of_outputs = 0;
+            for (uint32_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
+                if (solution->inputs_and_outputs[i].type & OUTPUT) number_of_outputs++;   
+            }
             struct steady_state result = {
                 .number_of_cycles = board->cycle - snapshot.cycle,
                 .number_of_outputs = solution->number_of_inputs_and_outputs ? UINT64_MAX : 0,
+                .number_of_inputs_by_input = calloc(number_of_inputs, sizeof(uint64_t)),
+                .number_of_outputs_by_output = calloc(number_of_outputs, sizeof(uint64_t)),
                 .outputs_repeat_after_cycle = board->cycle,
                 .eventual_behavior = EVENTUALLY_ENTERS_STEADY_STATE,
             };
@@ -272,9 +283,16 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                     break;
             }
             for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
+                if (!(solution->inputs_and_outputs[i].type & INPUT))
+                    continue;
+                uint64_t inputs = solution->inputs_and_outputs[i].spawned_consumed - snapshot.output_count[i];
+                result.number_of_inputs_by_input[solution->inputs_and_outputs[i].puzzle_index] = inputs;
+            }
+            for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
                 if (!(solution->inputs_and_outputs[i].type & SINGLE_OUTPUT))
                     continue;
-                uint64_t outputs = solution->inputs_and_outputs[i].number_of_outputs - snapshot.output_count[i];
+                uint64_t outputs = solution->inputs_and_outputs[i].spawned_consumed - snapshot.output_count[i];
+                result.number_of_outputs_by_output[solution->inputs_and_outputs[i].puzzle_index] = outputs;
                 if (outputs < result.number_of_outputs)
                     result.number_of_outputs = outputs;
             }
@@ -361,7 +379,6 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                 disable_check_until_next_snapshot = true;
                 continue;
             }
-            uint64_t repeating_outputs = 1;
             uint64_t repeating_periods = 0;
             for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
                 struct input_output *io = &solution->inputs_and_outputs[i];
@@ -369,23 +386,40 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
                     continue;
                 int32_t divisor = polymer_feed_rate_divisor(io);
                 if (divisor <= 0) {
-                    repeating_outputs = 0;
                     repeating_periods = 1;
                     break;
                 }
-                if ((uint64_t)io->outputs_per_repetition * (uint64_t)io->maximum_feed_rate * repeating_periods < repeating_outputs * (uint64_t)divisor) {
-                    repeating_outputs = (uint64_t)io->outputs_per_repetition * (uint64_t)io->maximum_feed_rate;
-                    repeating_periods = divisor;
+                uint64_t periods_to_loop = (uint64_t)divisor / gcd((uint64_t)io->maximum_feed_rate, (uint64_t)divisor);
+                if (repeating_periods == 0) {
+                    repeating_periods = periods_to_loop;
+                } else if (repeating_periods % periods_to_loop != 0) {
+                    repeating_periods = lcm(repeating_periods, periods_to_loop);
                 }
             }
-            if (repeating_outputs < result.number_of_outputs * repeating_periods) {
-                uint64_t d = gcd(repeating_outputs, repeating_periods);
-                repeating_outputs /= d;
-                repeating_periods /= d;
-                result.number_of_outputs = repeating_outputs;
-                result.number_of_cycles *= repeating_periods;
-                if (repeating_periods % 2 == 0)
-                    result.pivot_parity = false;
+            if (repeating_periods != 0) {
+                if (repeating_periods > 1) {
+                    result.number_of_outputs *= repeating_periods;
+                    result.number_of_cycles *= repeating_periods;
+                    if (repeating_periods % 2 == 0)
+                        result.pivot_parity = false;
+                    for (uint32_t i = 0; i < number_of_inputs; ++i) {
+                        result.number_of_inputs_by_input[i] *= repeating_periods;
+                    }
+                    for (uint32_t i = 0; i < number_of_outputs; ++i) {
+                        result.number_of_outputs_by_output[i] *= repeating_periods;
+                    }
+                }
+                for (size_t i = 0; i < solution->number_of_inputs_and_outputs; ++i) {
+                    struct input_output *io = &solution->inputs_and_outputs[i];
+                    if (!(io->type & REPEATING_OUTPUT))
+                        continue;
+                    int32_t divisor = polymer_feed_rate_divisor(io);
+                    uint64_t repetitions = (uint64_t)io->maximum_feed_rate * repeating_periods / divisor;
+                    result.number_of_outputs_by_output[io->puzzle_index] = repetitions;
+                    if ((uint64_t)io->outputs_per_repetition * repetitions < result.number_of_outputs) {
+                        result.number_of_outputs = (uint64_t)io->outputs_per_repetition * repetitions;
+                    }
+                }
             }
             if (board->area_growth_order == GROWTH_LINEAR) {
                 uint64_t linear_area_growth = 0;
@@ -499,4 +533,11 @@ struct steady_state run_until_steady_state(struct solution *solution, struct boa
     return (struct steady_state){
         .eventual_behavior = board->collision ? EVENTUALLY_STOPS_RUNNING : EVENTUALLY_REACHES_CYCLE_LIMIT,
     };
+}
+
+void destroy_steady_state(void *steady_state)
+{
+    struct steady_state *s = steady_state;
+    free(s->number_of_inputs_by_input);
+    free(s->number_of_outputs_by_output);
 }

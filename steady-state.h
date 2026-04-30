@@ -19,6 +19,12 @@ struct steady_state {
     // how many outputs are produced during this loop?
     uint64_t number_of_outputs;
 
+    // how many of each input is consumed each loop?
+    uint64_t *number_of_inputs_by_input;
+
+    // how many of each output is produced each loop?
+    uint64_t *number_of_outputs_by_output;
+
     // after which cycle do outputs start to repeat?
     uint64_t outputs_repeat_after_cycle;
 
@@ -32,6 +38,9 @@ struct steady_state {
     bool pivot_parity;
 };
 
-struct steady_state run_until_steady_state(struct solution *solution, struct board *board, uint64_t cycle_limit);
+struct steady_state run_until_steady_state(struct solution *solution, struct board *board, uint32_t number_of_inputs, uint64_t cycle_limit);
+
+// destroys a steady-state object.
+void destroy_steady_state(void *steady_state);
 
 #endif
