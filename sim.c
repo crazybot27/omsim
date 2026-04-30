@@ -1224,6 +1224,7 @@ static void perform_arm_instructions(struct solution *solution, struct board *bo
             break;
         default:
             break;
+        }
     }
     // carry out deferred movements.
     if (board->half_cycle == 2) {
