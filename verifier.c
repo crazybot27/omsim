@@ -289,7 +289,7 @@ int verifier_wrong_output_atom(void *verifier, int offset_u, int offset_v)
     p.u += v->wrong_output_basis_u.u * offset_u + v->wrong_output_basis_v.u * offset_v;
     p.v += v->wrong_output_basis_u.v * offset_u + v->wrong_output_basis_v.v * offset_v;
     atom a = *lookup_atom(&v->wrong_output_board, p);
-    for (int i = 0; i <= 16; ++i) {
+    for (int i = 1; i <= 16; ++i) {
         if (a & (1ULL << i))
             return i;
     }
