@@ -411,6 +411,8 @@ static struct molecule *get_molecule(struct board *board, struct atom_ref_at_pos
 {
     board->molecule.cursor = 0;
     board->molecule.size = 0;
+    if (!(*a.atom & ANY_ATOM))
+        return &board->molecule;
     // VISITED goes on the bottommost atom of the hex even if it isn't part of the molecule
     *lookup_atom(board, a.position) |= VISITED;
     add_atom_to_molecule(board, &board->molecule, a);
